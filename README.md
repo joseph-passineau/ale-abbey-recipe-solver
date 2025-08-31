@@ -2,6 +2,10 @@
 
 A powerful web-based tool to optimize beer recipes for the game [Ale Abbey - Monastery Brewery Tycoon](https://store.steampowered.com/app/2789460/Ale_Abbey__Monastery_Brewery_Tycoon/).
 
+## 🚀 Try it out
+
+[![Launch Recipe Solver](https://img.shields.io/badge/🚀_Launch_Recipe_Solver-Click_Here-blue?style=for-the-badge&logo=github)](https://joseph-passineau.github.io/ale-abbey-recipe-solver/)
+
 ## ✨ Features
 
 - **Smart Recipe Optimization**: Uses advanced linear programming algorithms to find the best ingredient combinations
