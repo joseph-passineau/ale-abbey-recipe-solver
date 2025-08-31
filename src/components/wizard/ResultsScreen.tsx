@@ -1,9 +1,14 @@
 import { ArrowLeftIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/solid';
-import type { Ingredient, Solution, Style } from '../../types';
+import { useCallback, useMemo } from 'react';
+import type { Ingredient, Solution, Style, Virtue } from '../../types';
+import { Outcome } from '../../types';
 import { PageLayout } from '../layout/PageLayout';
 import { Button } from '../ui/Button';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
+
+const PRECISION_MULTIPLIER = 1000000;
+const DECIMAL_PRECISION = 10;
 
 interface ResultsScreenProps {
   solution: Solution | null;
@@ -49,18 +54,24 @@ function ErrorView({
     <PageLayout background="red">
       <div className="flex items-center justify-center min-h-[60vh] p-4">
         <div className="bg-white rounded-xl shadow-2xl p-8 text-center max-w-2xl mx-auto">
-          <XCircleIcon className="w-16 h-16 text-red-500 mx-auto mb-6" />
+          <XCircleIcon
+            className="w-16 h-16 text-red-500 mx-auto mb-6"
+            aria-label="Error"
+          />
           <h2 className="text-2xl font-bold text-gray-800 mb-4">
             Recipe Not Found
           </h2>
           <p className="text-gray-600 mb-6">{error}</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button onClick={onBackToConstraints} variant="primary">
-              <ArrowLeftIcon className="w-5 h-5 mr-2" />
+              <ArrowLeftIcon className="w-5 h-5 mr-2" aria-label="Back arrow" />
               Back
             </Button>
             <Button onClick={onReset} variant="danger">
-              <ArrowPathIcon className="w-5 h-5 mr-2" />
+              <ArrowPathIcon
+                className="w-5 h-5 mr-2"
+                aria-label="Reset arrow"
+              />
               Start Over
             </Button>
           </div>
@@ -79,6 +90,54 @@ export function ResultsScreen({
   onReset,
   onBackToConstraints,
 }: ResultsScreenProps) {
+  const calculateVirtueScores = useCallback(() => {
+    if (!solution) return null;
+
+    const rawVirtues: Record<Virtue, number> = {
+      Flavor: 0,
+      Colour: 0,
+      Strength: 0,
+      Foam: 0,
+    };
+
+    Object.entries(solution.recipe).forEach(([ingredientName, quantity]) => {
+      const ingredient = ingredients.find(ing => ing.name === ingredientName);
+      if (ingredient) {
+        Object.entries(ingredient.virtues).forEach(([virtue, value]) => {
+          const contribution =
+            Math.round(value * quantity * PRECISION_MULTIPLIER) /
+            PRECISION_MULTIPLIER;
+          rawVirtues[virtue as Virtue] += contribution;
+        });
+      }
+    });
+
+    return Object.fromEntries(
+      Object.entries(rawVirtues).map(([virtue, value]) => [
+        virtue,
+        Math.round(value * DECIMAL_PRECISION) / DECIMAL_PRECISION,
+      ])
+    ) as Record<Virtue, number>;
+  }, [solution, ingredients]);
+
+  const virtueScores = useMemo(
+    () => calculateVirtueScores(),
+    [calculateVirtueScores]
+  );
+
+  const recipeIngredients = useMemo(
+    () => (solution ? Object.entries(solution.recipe) : []),
+    [solution]
+  );
+
+  const totalIngredients = useMemo(
+    () =>
+      solution
+        ? Object.values(solution.recipe).reduce((sum, qty) => sum + qty, 0)
+        : 0,
+    [solution]
+  );
+
   if (loading) {
     return <LoadingView style={style} />;
   }
@@ -93,43 +152,21 @@ export function ResultsScreen({
     );
   }
 
-  if (!solution) {
+  if (!solution || !virtueScores) {
     return null;
   }
 
-  const getVirtueColor = (value: number) => {
-    if (value === 2) return 'text-green-600 bg-green-100';
-    if (value === 1) return 'text-yellow-600 bg-yellow-100';
+  const getVirtueColor = (value: Outcome) => {
+    if (value === Outcome.Good) return 'text-green-600 bg-green-100';
+    if (value === Outcome.Neutral) return 'text-yellow-600 bg-yellow-100';
     return 'text-red-600 bg-red-100';
   };
 
-  const getVirtueLabel = (value: number) => {
-    if (value === 2) return 'Good';
-    if (value === 1) return 'Neutral';
+  const getVirtueLabel = (value: Outcome) => {
+    if (value === Outcome.Good) return 'Good';
+    if (value === Outcome.Neutral) return 'Neutral';
     return 'Bad';
   };
-
-  const calculateVirtueScores = () => {
-    const rawVirtues = { Flavor: 0, Colour: 0, Strength: 0, Foam: 0 };
-
-    Object.entries(solution.recipe).forEach(([ingredientName, quantity]) => {
-      const ingredient = ingredients.find(ing => ing.name === ingredientName);
-      if (ingredient) {
-        Object.entries(ingredient.virtues).forEach(([virtue, value]) => {
-          rawVirtues[virtue as keyof typeof rawVirtues] += value * quantity;
-        });
-      }
-    });
-
-    return rawVirtues;
-  };
-
-  const virtueScores = calculateVirtueScores();
-  const recipeIngredients = Object.entries(solution.recipe);
-  const totalIngredients = Object.values(solution.recipe).reduce(
-    (sum, qty) => sum + qty,
-    0
-  );
 
   return (
     <PageLayout
@@ -138,39 +175,56 @@ export function ResultsScreen({
       subtitle={`Your optimized ${style.name} brewing recipe`}
     >
       <div className="text-center mb-8">
-        <CheckCircleIcon className="w-20 h-20 text-green-500 mx-auto mb-4" />
+        <CheckCircleIcon
+          className="w-20 h-20 text-green-500 mx-auto mb-4"
+          aria-label="Success"
+        />
       </div>
 
       <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white rounded-xl shadow-lg p-8">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+        <section
+          className="bg-white rounded-xl shadow-lg p-8"
+          aria-labelledby="recipe-heading"
+        >
+          <h2
+            id="recipe-heading"
+            className="text-2xl font-bold text-gray-800 mb-6 flex items-center"
+          >
             🍺 Your Recipe
           </h2>
 
           <div className="space-y-4 mb-6">
-            {recipeIngredients.map(([ingredient, quantity]) => (
-              <div
-                key={ingredient}
-                className="flex justify-between items-center p-4 bg-gray-50 rounded-lg"
-              >
-                <div>
-                  <div className="font-medium text-gray-800">{ingredient}</div>
-                  <div className="text-sm text-gray-600">
-                    {quantity} unit{quantity !== 1 ? 's' : ''}
+            {recipeIngredients.map(([ingredient, quantity]) => {
+              const roundedQuantity = Math.round(quantity);
+              return (
+                <div
+                  key={ingredient}
+                  className="flex justify-between items-center p-4 bg-gray-50 rounded-lg"
+                >
+                  <div>
+                    <div className="font-medium text-gray-800">
+                      {ingredient}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {roundedQuantity} unit{roundedQuantity !== 1 ? 's' : ''}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-gray-900">
+                      {roundedQuantity}×
+                    </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="font-bold text-gray-900">{quantity}×</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="border-t pt-6 space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-gray-600">Total Ingredients:</span>
               <span className="font-bold text-gray-900">
-                {totalIngredients} units
+                {Math.round(totalIngredients)} unit
+                {Math.round(totalIngredients) !== 1 ? 's' : ''}
               </span>
             </div>
             <div className="flex justify-between items-center">
@@ -186,10 +240,16 @@ export function ResultsScreen({
               </span>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="bg-white rounded-xl shadow-lg p-8">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+        <section
+          className="bg-white rounded-xl shadow-lg p-8"
+          aria-labelledby="quality-heading"
+        >
+          <h2
+            id="quality-heading"
+            className="text-2xl font-bold text-gray-800 mb-6 flex items-center"
+          >
             ⭐ Quality Achievement
           </h2>
 
@@ -202,7 +262,7 @@ export function ResultsScreen({
                 <div className="font-medium text-gray-800">{virtue}</div>
                 <div className="flex items-center space-x-3">
                   <div className="text-lg font-bold text-gray-700">
-                    {virtueScores[virtue as keyof typeof virtueScores]}
+                    {virtueScores[virtue as Virtue]}
                   </div>
                   <div
                     className={`px-3 py-1 rounded-full text-sm font-medium ${getVirtueColor(value)}`}
@@ -213,7 +273,7 @@ export function ResultsScreen({
               </div>
             ))}
           </div>
-        </div>
+        </section>
       </div>
 
       <div className="text-center mt-8">
@@ -222,7 +282,10 @@ export function ResultsScreen({
           size="lg"
           className="flex items-center mx-auto"
         >
-          <ArrowPathIcon className="w-6 h-6 mr-3" />
+          <ArrowPathIcon
+            className="w-6 h-6 mr-3"
+            aria-label="Create new recipe"
+          />
           Create Another Recipe
         </Button>
       </div>
